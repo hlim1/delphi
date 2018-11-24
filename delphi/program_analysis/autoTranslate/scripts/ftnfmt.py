@@ -34,7 +34,8 @@ class Format:
         self._regexp_str = regexp0_str
         self._re = re.compile(regexp0_str)
         self._match_exps = [subs[1] for subs in self._re_cvt if subs[1] != None]
-        self._cvt_fns = [subs[2] for subs in self._re_cvt if subs[2] != None]
+        self._divisors = [subs[2] for subs in self._re_cvt if subs[2] != None]
+        self._cvt_fns = [subs[3] for subs in self._re_cvt if subs[3] != None]
 
 
     def match_line(self, line):
@@ -44,12 +45,20 @@ class Format:
         matched_values = []
         for i in range(self._re.groups):
             cvt_re = self._match_exps[i]
+            cvt_div = self._divisors[i]
             cvt_fn = self._cvt_fns[i]
             match_str = match.group(i+1)
+
+            print(">>> cvt_div = {}".format(str(cvt_div)))
+            print(">>> match_str = {}".format(match_str))
+
             match0 = re.match(cvt_re, match_str)
             if match0 != None:
                 if cvt_fn == 'float':
-                    val = float(match_str)
+                    if '.' in match_str:
+                        val = float(match_str)
+                    else:
+                        val = int(match_str)/cvt_div
                 elif cvt_fn == 'int':
                     val = int(match_str)
                 else:
@@ -79,12 +88,19 @@ class Format:
     
     # given a single format specifier, e.g., '2X', 'I5', etc., match_fmt_1() 
     # constructs a list of tuples for matching against that  specifier.  
-    # Each element of this list is a tuple (xtract_re, cvt_re, cvt_fn), where:
+    # Each element of this list is a tuple 
+    #
+    #        (xtract_re, cvt_re, divisor, cvt_fn)
+    #
+    # where:
     #
     #    xtract_re is a regular expression that extracts an input field of
     #            the requisite width;
     #    cvt_re is a regular expression that matches the character sequence
-    #            extracted by xtract_re against the specified format; and
+    #            extracted by xtract_re against the specified format; 
+    #    divisor is the value to divide by in order to get the appropriate
+    #            number of decimal places if a decimal point is not given
+    #            in the input value (meaningful only for floats); and
     #    cvt_fn is a string denoting the function to be used to convert the
     #            matched string to a value.
     def match_fmt_1(self, fmt):
@@ -111,21 +127,23 @@ class Format:
                 optional_sign = '-?'
                 rexp0 = '\d+'
                 rexp1 = leading_sp + optional_sign + rexp0   # r.e. for matching
-                rexp = [(xtract_rexp, rexp1, 'int')]
+                divisor = 1
+                rexp = [(xtract_rexp, rexp1, divisor, 'int')]
 
             elif fmt[0] in 'xX':               # skip
                 xtract_rexp = '.'              # r.e. for extraction
-                rexp = [(xtract_rexp, None, None)]
+                rexp = [(xtract_rexp, None, None, None)]
 
             elif fmt[0] in 'fF':               # floating point
                 idx0 = fmt.find('.')
                 sz = fmt[1:idx0]
-                xtract_rexp = '(.{' + sz + '})'           # r.e. for extraction
+                divisor = 10**(int(fmt[idx0+1:]))
+                xtract_rexp = '(.{' + sz + '})'            # r.e. for extraction
                 leading_sp = ' {,' + sz + '}?'
                 optional_sign = '-?'
-                rexp0 = '\d+\.\d+'
-                rexp1 = leading_sp + optional_sign + rexp0
-                rexp = [(xtract_rexp, rexp1, 'float')]                   # r.e. for matching
+                rexp0 = '\d+(\.\d+)?'
+                rexp1 = leading_sp + optional_sign + rexp0   # r.e. for matching
+                rexp = [(xtract_rexp, rexp1, divisor, 'float')]
             else:
                 print('ERROR: Unrecognized format specifier ' + fmt)
                 sys.exit(1)
