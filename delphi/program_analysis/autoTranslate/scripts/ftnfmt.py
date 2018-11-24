@@ -27,27 +27,35 @@
 
 import re, sys
 
-class FtnFmt:
+class Format:
     def __init__(self, format_list):
-        regexp_str = ''.join(self.mk_re_list(format_list))
-        self._re = re.compile(regexp_str)
-        self._regexp_str = regexp_str
+        self._re_cvt = self.match_fmt(format_list)
+        regexp0_str = ''.join([subs[0] for subs in self._re_cvt])
+        self._regexp_str = regexp0_str
+        self._re = re.compile(regexp0_str)
+        self._match_exps = [subs[1] for subs in self._re_cvt if subs[1] != None]
+        self._cvt_fns = [subs[2] for subs in self._re_cvt if subs[2] != None]
+
 
     def match_line(self, line):
         match = self._re.match(line)
         assert match != None, "Format mismatch (line = {})".format(line)
 
-        # this code uses a very simple heuristic to decide whether to
-        # compute an int or float value: if the string matched in the
-        # input contains '.' it computes a float, otherwise an int.
         matched_values = []
         for i in range(self._re.groups):
-            n = i+1
-            match_str = match.group(n)
-            if '.' in match_str:
-                val = float(match_str)
+            cvt_re = self._match_exps[i]
+            cvt_fn = self._cvt_fns[i]
+            match_str = match.group(i+1)
+            match0 = re.match(cvt_re, match_str)
+            if match0 != None:
+                if cvt_fn == 'float':
+                    val = float(match_str)
+                elif cvt_fn == 'int':
+                    val = int(match_str)
+                else:
+                    sys.stderr.write('unrecognized conversion function: {}\n'.format(cvt_fn))
             else:
-                val = int(match_str)
+                sys.stderr.write('format conversion failed: {}\n'.format(match_str))
 
             matched_values.append(val)
 
@@ -56,22 +64,30 @@ class FtnFmt:
 
     def __str__(self):
         return self._regexp_str
-        
+
+
     # given a list of Fortran format specifiers, e.g., ['I5', '2X', 'F4.1'],
-    # mk_re_list() constructs a regular expression for matching a string
-    # against that sequence of format specifiers.  
-    def mk_re_list(self, fmt_list):
+    # match_fmt() constructs a list of regular expressions for matching 
+    # successive non-space format specifiers.
+    def match_fmt(self, fmt_list):
         rexp_list = []
         for fmt in fmt_list:
-            rexp_list.extend(self.mk_re(fmt))
+            rexp_list.extend(self.match_fmt_1(fmt))
     
         return rexp_list
 
     
-    # given a single format specifier, e.g., '2X', 'I5', etc., mk_re() 
-    # constructs a regular expression for matching a string against that 
-    # specifier.  
-    def mk_re(self, fmt):
+    # given a single format specifier, e.g., '2X', 'I5', etc., match_fmt_1() 
+    # constructs a list of tuples for matching against that  specifier.  
+    # Each element of this list is a tuple (xtract_re, cvt_re, cvt_fn), where:
+    #
+    #    xtract_re is a regular expression that extracts an input field of
+    #            the requisite width;
+    #    cvt_re is a regular expression that matches the character sequence
+    #            extracted by xtract_re against the specified format; and
+    #    cvt_fn is a string denoting the function to be used to convert the
+    #            matched string to a value.
+    def match_fmt_1(self, fmt):
         # first, remove any surrounding space 
         fmt = fmt.strip()
     
@@ -86,19 +102,30 @@ class FtnFmt:
         if fmt[0] == '(':        # process parenthesized format list recursively
             fmt = fmt[1:-1]
             fmt_list = fmt.split(',')
-            rexp = self.mk_re_list(fmt_list)
+            rexp = self.match_fmt(fmt_list)
         else:
-            if fmt[0] == 'I':                 # integer 
+            if fmt[0] in 'iI':                 # integer 
                 sz = fmt[1:]
-                rexp = ['(\d{' + sz + '})']
-                rexp_pair = (rexp, 1)
-            elif fmt[0] == 'X':               # skip
-                sz = 1
-                rexp = [' ']
-            elif fmt[0] == 'F':               # floating point
+                xtract_rexp = '(.{' + sz + '})'           # r.e. for extraction
+                leading_sp = ' {,' + sz + '}?'
+                optional_sign = '-?'
+                rexp0 = '\d+'
+                rexp1 = leading_sp + optional_sign + rexp0   # r.e. for matching
+                rexp = [(xtract_rexp, rexp1, 'int')]
+
+            elif fmt[0] in 'xX':               # skip
+                xtract_rexp = '.'              # r.e. for extraction
+                rexp = [(xtract_rexp, None, None)]
+
+            elif fmt[0] in 'fF':               # floating point
                 idx0 = fmt.find('.')
                 sz = fmt[1:idx0]
-                rexp = ['([0-9. ]{' + sz + '})']
+                xtract_rexp = '(.{' + sz + '})'           # r.e. for extraction
+                leading_sp = ' {,' + sz + '}?'
+                optional_sign = '-?'
+                rexp0 = '\d+\.\d+'
+                rexp1 = leading_sp + optional_sign + rexp0
+                rexp = [(xtract_rexp, rexp1, 'float')]                   # r.e. for matching
             else:
                 print('ERROR: Unrecognized format specifier ' + fmt)
                 sys.exit(1)
@@ -128,9 +155,9 @@ def main():
     # The line of data shown (input1) is taken from the file WEATHER.INP
 
     format1 = ['I5','2X','F4.1','2X','F4.1','2X','F4.1','F6.1','14X','F4.1']
-    input1 = '87001   5.1  20.0   4.4  23.9              10.7 '
+    input1 = '87001  -5.1  20.0   4.4 -23.9              10.7 '
 
-    rexp1 = FtnFmt(format1)
+    rexp1 = Format(format1)
     (DATE, SRAD, TMAX, TMIN, RAIN, PAR) = rexp1.match_line(input1)
 
     print("FORMAT: {}".format(format1))
@@ -154,7 +181,7 @@ def main():
     format2 = ['3(1X,F7.4)']
     input2 = '    12.0    0.64   0.104'
 
-    rexp2 = FtnFmt(format2)
+    rexp2 = Format(format2)
     (Lfmax, EMP2, EMP1) = rexp2.match_line(input2)
 
     print("FORMAT: {}".format(format2))
