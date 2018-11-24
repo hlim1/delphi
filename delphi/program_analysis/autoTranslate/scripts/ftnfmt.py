@@ -48,10 +48,6 @@ class Format:
             cvt_div = self._divisors[i]
             cvt_fn = self._cvt_fns[i]
             match_str = match.group(i+1)
-
-            print(">>> cvt_div = {}".format(str(cvt_div)))
-            print(">>> match_str = {}".format(match_str))
-
             match0 = re.match(cvt_re, match_str)
             if match0 != None:
                 if cvt_fn == 'float':
