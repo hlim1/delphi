@@ -15,7 +15,7 @@
 
            (1) Create a FtnFmt object as follows:
 
-                   my_fmt_obj = FtnFmt(fmt_list)
+                   my_fmt_obj = Format(fmt_list)
 
            (2) To process a line of input inp_ln according to this format 
                and assign values to a tuple of variables var_list:
