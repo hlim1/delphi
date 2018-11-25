@@ -45,10 +45,11 @@ class Format:
         self._in_cvt_fns = None
 
         self._output_fmt = None
-        # self._out_gen_fmt = None
-        self._out_cvt_fns = None
+        self._out_gen_fmt = None
+        self._out_widths = None
 
 
+    # init_read_line() initializes fields relevant to input matching
     def init_read_line(self):
         format_list = self._format_list
         self._re_cvt = self.match_input_fmt(format_list)
@@ -61,16 +62,21 @@ class Format:
         self._read_line_init = True
 
 
+    # init_write_line() initializes fields relevant to output generation
     def init_write_line(self):
         format_list = self._format_list
         output_info = self.gen_output_fmt(format_list)
         self._output_fmt = ''.join([sub[0] for sub in output_info])
-        # self._out_gen_fmt = [sub[1] for sub in output_info if sub[1] != None]
+        self._out_gen_fmt = [sub[1] for sub in output_info if sub[1] != None]
         self._out_widths  = [sub[2] for sub in output_info if sub[2] != None]
-        self._out_cvt_fns = [sub[3] for sub in output_info if sub[3] != None]
 
 
     def read_line(self, line):
+        """
+        match a line of input according to the format specified and return a
+        tuple of the resulting values
+        """
+
         if not self._read_line_init:
             self.init_read_line()
 
@@ -104,45 +110,30 @@ class Format:
 
 
     def write_line(self, values):
+        """
+        process a list of values according to the format specified to generate
+        a line of output
+        """
+
         if not self._write_line_init:
             self.init_write_line()
     
         out_strs = []
         for i in range(len(self._out_widths)):
-            # out_fmt = self._out_gen_fmt[i]
-            out_cvt_fn = self._out_cvt_fns[i]
-            if out_cvt_fn == 'int':
-                out_val = self.cvt_I(self._out_widths[i], values[i])
-            elif out_cvt_fn == 'float':
-                out_val = self.cvt_F(self._out_widths[i], values[i])
+            out_fmt = self._out_gen_fmt[i]
+            out_width = self._out_widths[i]
+
+            if len(str(values[i])) > out_width:    # value too big for field
+                out_val = "*" * out_width
             else:
-                sys.stderr.write('unrecognized conversion function: {}\n'.format(out_cvt_fn))
-                out_val = "????"
+                out_val = out_fmt.format(values[i])
 
             out_strs.append(out_val)
-    
+
         out_str_exp = '"' + self._output_fmt + '".format' + str(tuple(out_strs))
         return eval(out_str_exp) 
         
             
-
-    def cvt_I(self, width, value):
-        if len(str(value)) > width:
-            return '*' * width
-    
-        fmt = '{:' + str(width) + 'd}'
-        return fmt.format(value)
-    
-    
-    def cvt_F(self, width_prec, value):
-        (width,prec) = width_prec
-        if len(str(value)) > width:
-            return '*' * width
-    
-        fmt = '{:' + str(width) + '.' + str(prec) + 'f}'
-        return fmt.format(value)
-
-
     def __str__(self):
         return self._regexp_str
 
@@ -154,18 +145,18 @@ class Format:
     ###########################################################################
 
     # given a list of Fortran format specifiers, e.g., ['I5', '2X', 'F4.1'],
-    # match_input_fmt() constructs a list of regular expressions for matching 
-    # successive non-space format specifiers.
-    def match_fmt(self, fmt_list):
+    # match_input_fmt() constructs a list of tuples for matching an input
+    # string against those format specifiers.
+    def match_input_fmt(self, fmt_list):
         rexp_list = []
         for fmt in fmt_list:
-            rexp_list.extend(self.match_fmt_1(fmt))
+            rexp_list.extend(self.match_input_fmt_1(fmt))
     
         return rexp_list
 
     
     # given a single format specifier, e.g., '2X', 'I5', etc., match_input_fmt_1() 
-    # constructs a list of tuples for matching against that  specifier.  
+    # constructs a list of tuples for matching against that specifier.  
     # Each element of this list is a tuple 
     #
     #        (xtract_re, cvt_re, divisor, cvt_fn)
@@ -181,7 +172,7 @@ class Format:
     #            in the input value (meaningful only for floats); and
     #    cvt_fn is a string denoting the function to be used to convert the
     #            matched string to a value.
-    def match_fmt_1(self, fmt):
+    def match_input_fmt_1(self, fmt):
         # first, remove any surrounding space 
         fmt = fmt.strip()
     
@@ -196,7 +187,7 @@ class Format:
         if fmt[0] == '(':        # process parenthesized format list recursively
             fmt = fmt[1:-1]
             fmt_list = fmt.split(',')
-            rexp = self.match_fmt(fmt_list)
+            rexp = self.match_input_fmt(fmt_list)
         else:
             if fmt[0] in 'iI':                 # integer 
                 sz = fmt[1:]
@@ -237,6 +228,9 @@ class Format:
     #                                                                         #
     ###########################################################################
 
+    # given a list of Fortran format specifiers, e.g., ['I5', '2X', 'F4.1'],
+    # gen_output_fmt() constructs a list of tuples for constructing an output
+    # string based on those format specifiers.
     def gen_output_fmt(self, fmt_list):
         rexp_list = []
         for fmt in fmt_list:
@@ -245,6 +239,19 @@ class Format:
         return rexp_list
 
 
+    # given a single format specifier, get_output_fmt_1() constructs and returns
+    # a list of tuples for matching against that specifier.
+    # Each element of this list is a tuple
+    #
+    #        (gen_fmt, cvt_fmt, sz)
+    #
+    # where:
+    #
+    #    gen_fmt is the Python format specifier for assembling this value into
+    #        the string constructed for output;
+    #    cvt_fmt is the Python format specifier for converting this value into
+    #        a string that will be assembled into the output string; and
+    #    sz is the width of this field.
     def gen_output_fmt_1(self, fmt):
         # first, remove any surrounding space 
         fmt = fmt.strip()
@@ -266,12 +273,11 @@ class Format:
                 sz = fmt[1:]
                 gen_fmt = '{}'
                 cvt_fmt = '{:' + str(sz) + 'd}'
-                gen_fn = 'int'
-                rexp = [(gen_fmt, cvt_fmt, int(sz), gen_fn)]
+                rexp = [(gen_fmt, cvt_fmt, int(sz))]
 
             elif fmt[0] in 'xX':
                 gen_fmt = ' '              
-                rexp = [(gen_fmt, None, None, None)]
+                rexp = [(gen_fmt, None, None)]
 
             elif fmt[0] in 'fF':               # floating point
                 idx0 = fmt.find('.')
@@ -279,8 +285,17 @@ class Format:
                 prec = fmt[idx0+1:]
                 gen_fmt = '{}'
                 cvt_fmt = '{:' + sz + '.' + prec + 'f}'
-                gen_fn = 'float'
-                rexp = [(gen_fmt, cvt_fmt, (int(sz), int(prec)), gen_fn)]
+                rexp = [(gen_fmt, cvt_fmt, int(sz))]
+
+            elif fmt[0] in "'\"":              # character string
+                sz = len(fmt)-2    # -2 for the quote at either end
+                gen_fmt = fmt[1:-1]
+                rexp = [(gen_fmt, None, None)]
+
+            elif fmt[0] == '/':                # newlines
+                gen_fmt = '\\n'*len(fmt)
+                rexp = [(gen_fmt, None, None)]
+
             else:
                 print('ERROR: Unrecognized format specifier ' + fmt)
                 sys.exit(1)
@@ -289,6 +304,7 @@ class Format:
         rexp *= reps
     
         return rexp
+
 
 ################################################################################
 #                                                                              #
