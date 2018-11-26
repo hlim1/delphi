@@ -5,8 +5,10 @@
     Purpose: Process a string (obtained from a data file) according to
              a Fortran FORMAT.
 
-             Currently the only formats supported are I, F, and X.  This
-             should be extended as necessary.
+             NOTE: Not all format specifiers are supported at this time.
+             The input formats supported are shown in the method 
+             match_input_fmt_1(), while the output formats supported are
+             shown in the method gen_output_fmt_1().
 
     Usage: Given a Fortran READ or WRITE statement that should be processed 
            according to a format list fmt_list (where fmt_list is a Python
@@ -69,6 +71,7 @@ class Format:
         self._output_fmt = ''.join([sub[0] for sub in output_info])
         self._out_gen_fmt = [sub[1] for sub in output_info if sub[1] != None]
         self._out_widths  = [sub[2] for sub in output_info if sub[2] != None]
+        self._write_line_init = True
 
 
     def read_line(self, line):
