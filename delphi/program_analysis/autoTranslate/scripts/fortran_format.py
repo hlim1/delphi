@@ -138,7 +138,7 @@ class Format:
         
             
     def __str__(self):
-        return self._regexp_str
+        return str(self._format_list)
 
 
     ###########################################################################
