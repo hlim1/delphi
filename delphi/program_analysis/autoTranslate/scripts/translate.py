@@ -34,7 +34,7 @@ from delphi.program_analysis.autoTranslate.scripts.get_comments import (
 from typing import List, Dict
 
 LIBRTNS = ["read", "open", "close", "format", "print", "write"]
-LIBFNS = ["MOD", "EXP", "INDEX", "MIN", "MAX", "cexp", "cmplx", "ATAN"]
+LIBFNS = ["mod", "exp", "index", "min", "max", "cexp", "cmplx", "atan"]
 INPUTFNS = ["read"]
 OUTPUTFNS = ["write"]
 SUMMARIES = {}
@@ -125,9 +125,6 @@ def parseTree(root, state):
 
     elif root.tag == "argument":
         return [{"tag": "arg", "name": root.attrib["name"]}]
-
-    # elif root.tag == "name":
-    # return [{"tag":"arg", "name":root.attrib["id"]}]
 
     elif root.tag == "declaration":
         decVars = []
@@ -236,7 +233,7 @@ def parseTree(root, state):
         return [{"tag": "stop"}]
 
     elif root.tag == "name":
-        if root.attrib["id"] in LIBFNS:
+        if root.attrib["id"].lower() in LIBFNS:
             fn = {"tag": "call", "name": root.attrib["id"], "args": []}
             for node in root:
                 fn["args"] += parseTree(node, state)
@@ -249,8 +246,6 @@ def parseTree(root, state):
             for node in root:
                 fn["args"] += parseTree(node, state)
             return [fn]
-        # elif root.attrib["id"] in FUNCTIONLIST and state.subroutine["tag"] == "function":
-        #    fn = {"tag": "return", "name": root.attrib["id"]
         else:
             ref = {"tag": "ref", "name": root.attrib["id"]}
             subscripts = []
@@ -267,8 +262,6 @@ def parseTree(root, state):
                 assign["target"] = parseTree(node, state)
             elif node.tag == "value":
                 assign["value"] = parseTree(node, state)
-            # if assign["target"][0]["name"] in FUNCTIONLIST:
-            #    assign["value"][0]["tag"] = "ret"
         if (assign["target"][0]["name"] in FUNCTIONLIST) and (
             assign["target"][0]["name"] == state.subroutine["name"]
         ):
@@ -279,7 +272,6 @@ def parseTree(root, state):
 
     elif root.tag == "function":
         subroutine = {"tag": root.tag, "name": root.attrib["name"]}
-        # FUNCTIONLIST.append(root.attrib["name"])
         SUMMARIES[root.attrib["name"]] = None
         for node in root:
             if node.tag == "header":
@@ -357,7 +349,7 @@ def analyze(trees, comments) -> Dict:
     # Parse through the ast tree a second time to convert the XML ast format to
     # a format that can be used to generate python statements.
     for tree in trees:
-        ast += parseTree(tree, ParseState())
+        ast += parseTree(tree.getroot(), ParseState())
 
     """
 

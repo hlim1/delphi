@@ -165,6 +165,8 @@ def getVarType(annNode):
             return "real"
         if dType == "int":
             return "integer"
+        if dType == "str":
+            return "str"
         else:
             sys.stderr.write("Unsupported type\n")
     except:
@@ -177,6 +179,8 @@ def getDType(val):
         dtype = "integer"
     elif isinstance(val, float):
         dtype = "real"
+    elif isinstance(val, string):
+        dtype = "str"
     else:
         sys.stderr.write(f"num: {type(node.n)}\n")
         sys.exit(1)
@@ -193,7 +197,7 @@ def make_fn_dict(name, target, sources, lambdaName, node):
     source = []
     for src in sources:
         if "call" in src:
-            source = make_call_body_dict(src)
+            source.extend(make_call_body_dict(src, "fn"))
         elif "var" in src:
             variable = src["var"]["variable"]
             source.append({"name": variable, "type": "variable"})
@@ -210,22 +214,34 @@ def make_fn_dict(name, target, sources, lambdaName, node):
     return fn
 
 
-def make_call_body_dict(source):
+def make_call_body_dict(source, dest):
     source_list = []
     name = source["call"]["function"]
     source_list.append({"name": name, "type": "function"})
     for ip in source["call"]["inputs"]:
-        if "var" in ip[0]:
-            variable = ip[0]["var"]["variable"]
-            source_list.append({"name": variable, "type": "variable"})
+        for types in ip:
+            if "var" in types:
+                variable = types["var"]["variable"]
+                if dest == 'fn':
+                    source_list.append({"name": variable, "type": "variable"})
+                elif dest == 'body':
+                    source_list.append({"name": variable, "index": types["var"]["index"]}) 
     return source_list
 
 
 def make_body_dict(name, target, sources):
+    input_list = []
+    for src in sources:
+        if "call" in src:
+            input_list.extend(make_call_body_dict(src, "body"))
+        elif "var" in src:
+            variable = src["var"]["variable"]
+            input_list.append({"name": variable, "index": src["var"]["index"]})
+
     body = {
         "name": name,
         "output": target["var"],
-        "input": [src["var"] for src in sources if "var" in src],
+        "input": input_list,
     }
     return body
 
@@ -273,9 +289,7 @@ def genPgm(node, state, fnNames):
         bodyPgm = genPgm(node.body, fnState, fnNames)
 
         body, fns = get_body_and_functions(bodyPgm)
-
         variables = list(localDefs.keys())
-
         fnDef = {
             "name": node.name,
             "type": "container",
@@ -333,7 +347,7 @@ def genPgm(node, state, fnNames):
 
     # Str: ('s',)
     elif isinstance(node, ast.Str):
-        return [{"type": "literal", "dtype": "string", "value": node.s}]
+        return [{"type": "literal", "dtype": "str", "value": node.s}]
 
     # For: ('target', 'iter', 'body', 'orelse')
     elif isinstance(node, ast.For):
@@ -410,7 +424,6 @@ def genPgm(node, state, fnNames):
         pgm = {"functions": [], "body": []}
 
         condSrcs = genPgm(node.test, state, fnNames)
-
         condNum = state.nextDefs.get("#cond", state.lastDefDefault + 1)
         state.nextDefs["#cond"] = condNum + 1
 
@@ -421,15 +434,35 @@ def genPgm(node, state, fnNames):
         condOutput = {"variable": condName, "index": 0}
 
         lambdaName = getFnName(fnNames, f"{state.fnName}__lambda__{condName}")
+        if len(condSrcs) > 2:
+            sources = list()
+            inputs = list()
+            for item in condSrcs:
+                finSource = [
+                    {"name": src["var"]["variable"], "type": "variable"}
+                    for src in item
+                    if "var" in src
+                ]
+                finInput = [src["var"] for src in item if "var" in src] 
+                for x in finSource:
+                    if x not in sources:
+                        sources.append(x)
+                for x in finInput:
+                    if x not in inputs:
+                        inputs.append(x)
+        else:
+            sources = [
+                {"name": src["var"]["variable"], "type": "variable"}
+                for src in condSrcs
+                if "var" in src
+            ]
+            inputs = [src["var"] for src in condSrcs if "var" in src]
+
         fn = {
             "name": fnName,
             "type": "assign",
             "target": condName,
-            "sources": [
-                {"name": src["var"]["variable"], "type": "variable"}
-                for src in condSrcs
-                if "var" in src
-            ],
+            "sources": sources,
             "body": [
                 {
                     "type": "lambda",
@@ -438,10 +471,11 @@ def genPgm(node, state, fnNames):
                 }
             ],
         }
+        
         body = {
             "name": fnName,
             "output": condOutput,
-            "input": [src["var"] for src in condSrcs if "var" in src],
+            "input": inputs,
         }
         pgm["functions"].append(fn)
         pgm["body"].append(body)
@@ -450,7 +484,7 @@ def genPgm(node, state, fnNames):
             node.test,
             lambdaName,
             None,
-            [src["var"]["variable"] for src in condSrcs if "var" in src],
+            [src["name"] for src in sources],
         )
 
         startDefs = state.lastDefs.copy()
@@ -482,7 +516,7 @@ def genPgm(node, state, fnNames):
         defVersions = {
             key: [
                 version
-                for version in [
+               for version in [
                     startDefs.get(key),
                     ifDefs.get(key),
                     elseDefs.get(key),
@@ -491,7 +525,6 @@ def genPgm(node, state, fnNames):
             ]
             for key in updatedDefs
         }
-
         for updatedDef in defVersions:
             name = "test1"
             versions = defVersions[updatedDef]
@@ -567,7 +600,6 @@ def genPgm(node, state, fnNames):
                             "type": "literal",
                         }
                     ]
-
         return genPgm(node.left, state, fnNames) + genPgm(
             node.right, state, fnNames
         )
@@ -759,6 +791,22 @@ def genPgm(node, state, fnNames):
             pgms += pgm
         return [mergeDicts(pgms)]
 
+    elif isinstance(node, ast.BoolOp):
+        pgms = []
+        boolOp = {
+            ast.And: "and",
+            ast.Or: "or"
+            }
+
+        for key in boolOp:
+            if isinstance(node.op, key):
+                pgms.append([{"boolOp": boolOp[key]}])
+
+        for item in node.values:
+            pgms.append(genPgm(item, state, fnNames))
+  
+        return pgms
+ 
     elif isinstance(node, ast.AST):
         sys.stderr.write(
             f"No handler for AST.{node.__class__.__name__} in genPgm, fields: {node._fields}\n"
