@@ -333,7 +333,7 @@ def printAstTree(astFile, tree, blockVal):
 
 
 def get_trees(files: List[str]) -> List:
-    return [ET.parse(f) for f in files]
+    return [ET.parse(f).getroot() for f in files]
 
 
 def analyze(trees, comments) -> Dict:
@@ -348,7 +348,7 @@ def analyze(trees, comments) -> Dict:
     # Parse through the ast tree a second time to convert the XML ast format to
     # a format that can be used to generate python statements.
     for tree in trees:
-        ast += parseTree(tree.getroot(), ParseState())
+        ast += parseTree(tree, ParseState())
 
     """
 
