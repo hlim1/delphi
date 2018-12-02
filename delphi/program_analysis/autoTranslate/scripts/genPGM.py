@@ -236,7 +236,7 @@ def make_body_dict(name, target, sources):
             input_list.extend(make_call_body_dict(src, "body"))
         elif "var" in src:
             variable = src["var"]["variable"]
-            input_list.append({"name": variable, "index": src["var"]["index"]})
+            input_list.append({"variable": variable, "index": src["var"]["index"]})
 
     body = {
         "name": name,
