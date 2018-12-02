@@ -282,6 +282,6 @@ CROP_YIELD_JSON_DICT = {
         },
     ],
     "start": "CROP_YIELD",
-    "name": "pgm.json",
+    "name": "crop_yield.json",
     "dateCreated": str(date.today()),
 }
