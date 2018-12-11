@@ -126,15 +126,15 @@ class Format:
             out_fmt = self._out_gen_fmt[i]
             out_width = self._out_widths[i]
 
-            if len(str(values[i])) > out_width:    # value too big for field
+            out_val = out_fmt.format(values[i])
+            if len(out_val) > out_width:    # value too big for field
                 out_val = "*" * out_width
-            else:
-                out_val = out_fmt.format(values[i])
 
             out_strs.append(out_val)
 
         out_str_exp = '"' + self._output_fmt + '".format' + str(tuple(out_strs))
-        return eval(out_str_exp) 
+        out_str = eval(out_str_exp) 
+        return out_str + "\n"
         
             
     def __str__(self):
@@ -282,13 +282,26 @@ class Format:
                 gen_fmt = ' '              
                 rexp = [(gen_fmt, None, None)]
 
-            elif fmt[0] in 'fF':               # floating point
+            elif fmt[0] in "eEfFgG":           # various floating point formats
                 idx0 = fmt.find('.')
                 sz = fmt[1:idx0]
-                prec = fmt[idx0+1:]
+                suffix = fmt[idx0+1:]
+                # The 'E' and G formats can optionally specify the width of 
+                # the exponent, e.g.: 'E15.3E2'.  For now we ignore any such
+                # the exponent width -- but if it's there, we need to extract
+                # the sequence of digits before it.
+                m = re.match('(\d+).*', suffix)
+                assert m != None, "Improper format? \"{}\"".format(fmt)
+                prec = m.group(1)
                 gen_fmt = '{}'
-                cvt_fmt = '{:' + sz + '.' + prec + 'f}'
+                cvt_fmt = '{:' + sz + '.' + prec + fmt[0] + '}'
                 rexp = [(gen_fmt, cvt_fmt, int(sz))]
+
+            elif fmt[0] in "pP":               # scaling factor
+                # For now we ignore scaling: there are lots of other things we
+                # need to spend time on.  To fix later if necessary.
+                rest_of_fmt = fmt[1:]
+                rexp = gen_output_fmt_1(self, rest_of_fmt)
 
             elif fmt[0] in "'\"":              # character string
                 sz = len(fmt)-2    # -2 for the quote at either end
@@ -307,6 +320,62 @@ class Format:
         rexp *= reps
     
         return rexp
+
+
+################################################################################
+#                                                                              #
+#                     DEFAULT FORMATS FOR LIST-DIRECTED I/O                    #
+#                                                                              #
+################################################################################
+
+# list_write_defaults specifies the default formats for list-directed output.
+# Source: https://software.intel.com/en-us/fortran-compiler-developer-guide-\
+#           and-reference-rules-for-list-directed-sequential-write-statements
+
+list_write_defaults = {'BYTE'       : 'I5',
+                       'LOGICAL(1)' : 'L2',
+                       'LOGICAL(2)' : 'L2',
+                       'LOGICAL(4)' : 'L2',
+                       'LOGICAL(8)' : 'L2',
+                       'INTEGER'    : 'I12',
+                       'INTEGER(1)' : 'I5',
+                       'INTEGER(2)' : 'I7',
+                       'INTEGER(4)' : 'I12',
+                       'INTEGER(8)' : 'I22',
+                       'REAL'       : '1PE14.5E2',
+                       'REAL(4)'    : '1PG15.7E2',
+                       'REAL(8)'    : '1PG24.15E3',
+                       'REAL(16)'   : '1PG43.33E4'}
+
+
+# default_output_format() takes a type name and returns the default format
+# specifier for list-directed output of a value of that type.
+def default_output_format(type_item):
+    type_item = type_item.upper()
+    if type_item in list_write_defaults:
+        return list_write_defaults[type_item]
+
+    if type_item[0] in '"\'':
+        return type_item
+
+    sys.stderr.write("WARNING: No output format found for type {}\n".format(type_item))
+    return None
+
+
+# list_output_formats() takes a list of type names and returns a list of
+# format specifiers for list-directed output of values of those types.
+def list_output_formats(type_list):
+    out_format_list = []
+    for type_item in type_list:
+        item_format = default_output_format(type_item)
+        out_format_list.append(item_format)
+
+    return out_format_list
+
+
+def list_input_formats(type_list):
+    sys.stderr.write("*** List-directed input not yet implemented\n")
+    return []
 
 
 ################################################################################
