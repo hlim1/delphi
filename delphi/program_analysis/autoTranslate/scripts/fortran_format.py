@@ -10,7 +10,10 @@
              match_input_fmt_1(), while the output formats supported are
              shown in the method gen_output_fmt_1().
 
-    Usage: Given a Fortran READ or WRITE statement that should be processed 
+    Usage: 
+           I. FORMATTED I/O
+
+           Given a Fortran READ or WRITE statement that should be processed 
            according to a format list fmt_list (where fmt_list is a Python
            list of Fortran FORMAT descriptors), do the following:
 
@@ -27,6 +30,21 @@
                of values val1, ..., valN:
 
                    out_string = my_fmt_obj.write_line([val1, ..., valN])
+
+           II. LIST_DIRECTED I/O
+
+           At this time only list-directed output has been implemented.
+
+           For list-directed output, e.g.: WRITE (*,*) X, Y, Z do the following:
+
+           (1) Construct a list of the types of the values to be written.
+               Let this list be denoted by out_type_list.
+
+           (2) Construct a list of format specifiers for these types using:
+
+                   fmt_list = list_output_format(out_type_list)
+
+           (3) Use fmt_list as described above.
 
            There are some examples towards the end of this file.
 """
@@ -217,7 +235,7 @@ class Format:
                 rexp1 = leading_sp + optional_sign + rexp0   # r.e. for matching
                 rexp = [(xtract_rexp, rexp1, divisor, 'float')]
             else:
-                print('ERROR: Unrecognized format specifier ' + fmt)
+                sys.stderr.write('ERROR: Unrecognized format specifier {}\n'.format(fmt))
                 sys.exit(1)
     
         # replicate the regular expression by the repetition factor in the format
@@ -313,7 +331,7 @@ class Format:
                 rexp = [(gen_fmt, None, None)]
 
             else:
-                print('ERROR: Unrecognized format specifier ' + fmt)
+                sys.stderr.write('ERROR: Unrecognized format specifier {}\n'.format(fmt))
                 sys.exit(1)
     
         # replicate the regular expression by the repetition factor in the format
