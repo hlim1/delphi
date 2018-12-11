@@ -1,24 +1,23 @@
 #!/usr/bin/python
 
 """
+This script converts the XML version of AST of the Fortran
+file into a JSON representation of the AST along with other
+non-source code information. The output is a pickled file
+which contains this information in a parsable data structure.
 
-   File:    translate.py
+Example:
+    This script is executed by the autoTranslate script as one
+    of the steps in converted a Fortran source file to Python
+    file. For standalone execution:::
 
-   Purpose: This script converts the XML version of AST of the Fortran
-            file into a JSON representation of the AST along with other
-            non-source code information. The output is a pickled file
-            which contains this information in a parsable data structure.
+        python translate.py -f <ast_file> -g <pickle_file>
 
-   Usage:   This script is executed by the autoTranslate script as one
-            of the steps in converted a Fortran source file to Python
-            file. For standalone execution:
-              python translate.py -f <ast_file> -g <pickle_file>
+ast_file: The XML represenatation of the AST of the Fortran file. This is
+produced by the OpenFortranParser.
 
-            ast_file: The XML represenatation of the AST of the Fortran
-                      file. This is produced by the OpenFortranParser.
-
-            pickle_file: The file which will contain the pickled version
-                          of JSON AST and supporting information.
+pickle_file: The file which will contain the pickled version of JSON AST and
+supporting information.
 
 """
 
@@ -34,7 +33,7 @@ from delphi.program_analysis.autoTranslate.scripts.get_comments import (
 from typing import List, Dict
 
 LIBRTNS = ["read", "open", "close", "format", "print", "write"]
-LIBFNS = ["MOD", "EXP", "INDEX", "MIN", "MAX", "cexp", "cmplx", "ATAN"]
+LIBFNS = ["mod", "exp", "index", "min", "max", "cexp", "cmplx", "atan"]
 INPUTFNS = ["read"]
 OUTPUTFNS = ["write"]
 SUMMARIES = {}
@@ -125,9 +124,6 @@ def parseTree(root, state):
 
     elif root.tag == "argument":
         return [{"tag": "arg", "name": root.attrib["name"]}]
-
-    # elif root.tag == "name":
-    # return [{"tag":"arg", "name":root.attrib["id"]}]
 
     elif root.tag == "declaration":
         decVars = []
@@ -236,7 +232,7 @@ def parseTree(root, state):
         return [{"tag": "stop"}]
 
     elif root.tag == "name":
-        if root.attrib["id"] in LIBFNS:
+        if root.attrib["id"].lower() in LIBFNS:
             fn = {"tag": "call", "name": root.attrib["id"], "args": []}
             for node in root:
                 fn["args"] += parseTree(node, state)
@@ -249,8 +245,6 @@ def parseTree(root, state):
             for node in root:
                 fn["args"] += parseTree(node, state)
             return [fn]
-        # elif root.attrib["id"] in FUNCTIONLIST and state.subroutine["tag"] == "function":
-        #    fn = {"tag": "return", "name": root.attrib["id"]
         else:
             ref = {"tag": "ref", "name": root.attrib["id"]}
             subscripts = []
@@ -267,8 +261,6 @@ def parseTree(root, state):
                 assign["target"] = parseTree(node, state)
             elif node.tag == "value":
                 assign["value"] = parseTree(node, state)
-            # if assign["target"][0]["name"] in FUNCTIONLIST:
-            #    assign["value"][0]["tag"] = "ret"
         if (assign["target"][0]["name"] in FUNCTIONLIST) and (
             assign["target"][0]["name"] == state.subroutine["name"]
         ):
@@ -279,7 +271,6 @@ def parseTree(root, state):
 
     elif root.tag == "function":
         subroutine = {"tag": root.tag, "name": root.attrib["name"]}
-        # FUNCTIONLIST.append(root.attrib["name"])
         SUMMARIES[root.attrib["name"]] = None
         for node in root:
             if node.tag == "header":
@@ -342,7 +333,7 @@ def printAstTree(astFile, tree, blockVal):
 
 
 def get_trees(files: List[str]) -> List:
-    return [ET.parse(f) for f in files]
+    return [ET.parse(f).getroot() for f in files]
 
 
 def analyze(trees, comments) -> Dict:

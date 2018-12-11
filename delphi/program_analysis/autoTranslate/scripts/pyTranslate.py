@@ -1,25 +1,22 @@
 #!/usr/bin/python
 
 """
+Purpose:
+    Convert a Fortran AST representation into a Python
+    script having the same functionalities and performing
+    the same operations as the original Fortran file.
 
-   File:    pyTranslate.py
+Example:
+    This script is executed by the autoTranslate script as one
+    of the steps in converted a Fortran source file to Python
+    file. For standalone execution:::
 
-   Purpose: Convert a Fortran AST representation into a Python
-            script having the same functionalities and performing
-            the same operations as the original Fortran file.
+        python pyTranslate -f <pickle_file> -g <python_file>
 
-   Usage:   This script is executed by the autoTranslate script as one
-            of the steps in converted a Fortran source file to Python
-            file. For standalone execution:
-               python pyTranslate -f <pickle_file> -g <python_file>
+pickle_file: Pickled file containing the ast represenatation of the Fortran file
+along with other non-source code information.
 
-            pickle_file: Pickled file containing the ast represenatation
-                         of the Fortran file along with other non-source
-                         code information.
-
-            python_file: The Python file on which to write the resulting
-                         python script.
-
+python_file: The Python file on which to write the resulting python script.
 """
 
 import sys
@@ -28,8 +25,9 @@ import argparse
 
 GETFRAME_EXPR = "sys._getframe({}).f_code.co_name"
 
+PROGRAM_STATE = []
 PRINTFN = {}
-LIBFNS = ["MOD", "EXP", "INDEX", "MIN", "MAX", "cexp", "cmplx", "ATAN"]
+LIBFNS = ["mod", "exp", "index", "min", "max", "cexp", "cmplx", "atan"]
 MATHFUNC = ["mod", "exp", "cexp", "cmplx"]
 
 
@@ -129,8 +127,8 @@ def printFunction(pyStrings, node, printState):
 
 def printProgram(pyStrings, node, printState):
     printSubroutine(pyStrings, node, printState)
-    pyStrings.append(f"\n\n{node['name']}(){printState.sep}")
-
+    PROGRAM_STATE.append(node['name'])
+    PROGRAM_STATE.append(printState.sep)
 
 def printCall(pyStrings, node, printState):
     if not printState.indexRef:
@@ -138,7 +136,7 @@ def printCall(pyStrings, node, printState):
 
     inRef = False
 
-    if node["name"] in LIBFNS:
+    if node["name"].lower() in LIBFNS:
         node["name"] = node["name"].lower()
         if node["name"] in MATHFUNC:
             node["name"] = "math." + node["name"]
@@ -163,6 +161,8 @@ def printArg(pyStrings, node, printState):
         varType = "int"
     elif node["type"] in ["DOUBLE", "REAL"]:
         varType = "float"
+    elif node["type"] == "CHARACTER":
+        varType == "str"
     else:
         print(f"unrecognized type {node['type']}")
         sys.exit(1)
@@ -182,6 +182,9 @@ def printVariable(pyStrings, node, printState):
         elif node["type"] in ["DOUBLE", "REAL"]:
             initVal = 0.0
             varType = "float"
+        elif node["type"] == "CHARACTER":
+            initVal = "''"
+            varType = "str"
         else:
             print(f"unrecognized type {node['type']}")
             sys.exit(1)
@@ -208,8 +211,6 @@ def printDo(pyStrings, node, printState):
 
 
 def printIndex(pyStrings, node, printState):
-    # pyStrings.append("{0} in range({1}, {2}+1)".format(node['name'], node['low'], node['high'])) Don't use this
-    # pyStrings.append(f"{node['name']}[0] in range(") Use this instead
     pyStrings.append(f"{node['name']}[0] in range(")
     printAst(
         pyStrings,
@@ -271,6 +272,9 @@ def printOp(pyStrings, node, printState):
             ".eq.": " == ",
             ".lt.": " < ",
             ".le.": " <= ",
+            ".ge.": " >= ",
+            ".and.": " and ",
+            ".or.": " or "
         }
         pyStrings.append(
             operator_mapping.get(
@@ -342,9 +346,10 @@ def printExit(pyStrings, node, printState):
 
 
 def printReturn(pyStrings, node, printState):
-    #    pyStrings.append("sys.exit(0)")
-    pyStrings.append("return True")
+    pyStrings.append("")
 
+def printExit(pyStrings, node, printState):
+    pyStrings.append("exit(0)")
 
 def setupPrintFns():
     PRINTFN.update(
@@ -365,6 +370,7 @@ def setupPrintFns():
             "return": printReturn,
             "function": printFunction,
             "ret": printFuncReturn,
+            "stop": printExit,
             #  "read": printFileRead,
             #  "open": printFileOpen,
             #  "close": printFileClose,
@@ -397,6 +403,8 @@ def create_python_string(outputDict):
     pyStrings.append("import math")
     setupPrintFns()
     printAst(pyStrings, outputDict["ast"], PrintState())
+    if (len(PROGRAM_STATE) > 0):
+        pyStrings.append(f"\n\n{PROGRAM_STATE[0]}(){PROGRAM_STATE[1]}") 
     return "".join(pyStrings)
 
 
